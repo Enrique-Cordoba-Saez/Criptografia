@@ -84,18 +84,34 @@ while exit != 1:
         #Enviar mensaje
         if account_action == 1:
             recipient_user = str(input("¿A quién desea enviar mensajes?\n"))
-            with open("data_bank.json", "r", encoding="utf-8", newline="") as file:
+            with open("users.json", "r", encoding="utf-8", newline="") as file:
                 usuarios = json.load(file)
             flag = 0
             for i in usuarios:
                 if recipient_user == i["_username"]:
                     flag = 1
+
             if flag == 1:
-                mensaje = message(current_user, recipient_user, str(input()))
+                first_message = True
                 for i in usuarios:
-                    if current_user == i["_username"]:
+                    if recipient_user == i["_username"]:
                         for j in i:
-                            if recipient_user == j:
+                            if current_user == j:
+                                first_message = False
+                                print(i[j])
+                                now = datetime.now()
+                                dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+                                i[j][dt_string] = str(input("Escriba el mensaje:\n"))
+                                with open("users.json", "w", encoding="utf-8", newline="") as file:
+                                    json.dump(usuarios, file, indent=2)
+                        if first_message == True:
+                            i[current_user] = {}
+                            now = datetime.now()
+                            dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+                            i[current_user][dt_string] = str(input("Escriba el mensaje:\n"))
+                            with open("users.json", "w", encoding="utf-8", newline="") as file:
+                                json.dump(usuarios, file, indent=2)
+
             else:
                 print("Ese usuario no existe")
 
@@ -103,7 +119,7 @@ while exit != 1:
         #Comprobar mensajes
         elif account_action == 0:
             checked_user = str(input("¿De quién desea ver los mensajes recibidos?\n"))
-            with open("data_bank.json", "r", encoding="utf-8", newline="") as file:
+            with open("users.json", "r", encoding="utf-8", newline="") as file:
                 usuarios = json.load(file)
             flag = 0
             for i in usuarios:
