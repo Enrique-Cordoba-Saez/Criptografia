@@ -1,0 +1,15 @@
+[
+  {
+    "_username": "juan",
+    "_password": 123456789,
+    "pepe": {"04/10/2023 11:30:54": "Buenos días", "04/10/2023 11:30:58": "Buenas tardes"}
+  },
+  {
+    "_username": "pepe",
+    "_password": 23
+  },
+  {
+    "_username": "juanjo",
+    "_password": 1234
+  }
+]
