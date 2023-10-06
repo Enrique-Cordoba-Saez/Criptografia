@@ -1,9 +1,13 @@
 import json
 from datetime import datetime
+import os
+#from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 import Crypto
 
 exit = 0
 usuarios = []
+
+#class cryptography.hazmat.primitives.ciphers.aead.ChaCha20Poly1305(key)
 
 
 class user_record:
@@ -35,8 +39,8 @@ while exit != 1:
         #Sign up for the first time
         if homepage_action == 1:
             new_user = str(input("Introduzca su futuro nombre de usuario:\n"))
-            new_password = int(input("Introduzca su nueva contraseña:\n"))
-            confirmed_password = int(input("Confirme su nueva contraseña:\n"))
+            new_password = str(input("Introduzca su nueva contraseña:\n"))
+            confirmed_password = str(input("Confirme su nueva contraseña:\n"))
             if new_password != confirmed_password:
                 homepage_action = 2
                 print("Las contraseñas no coinciden")
@@ -57,7 +61,7 @@ while exit != 1:
         #Log in normally
         elif homepage_action == 0:
             current_user = str(input("Introduzca su nombre de usuario:\n"))
-            current_password = int(input("Introduzca su contraseña:\n"))
+            current_password = str(input("Introduzca su contraseña:\n"))
             with open("users.json", "r", encoding="utf-8", newline="") as file:
                 usuarios = json.load(file)
             flag = 0
