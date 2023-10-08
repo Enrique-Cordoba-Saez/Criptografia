@@ -31,14 +31,24 @@ print(dt_string)
 
 
 while exit != 1:
-    homepage_action = 2
+    homepage_action = -1
     signed_up = False
     while homepage_action != 0 and homepage_action != 1:
-        homepage_action = int(input("¿Es la primera vez que visita la página?"
-                                    " (1=Afirmación/0=Negación):\n"))
+
+        # Preguntar al usuario por la acción que desea realizar
+        try:
+            homepage_action = int(input("¿Es la primera vez que visita la página?"
+                                        " (1=Afirmación/0=Negación):\n"))
+
+        # Obtención de una respuesta distinta a 1 o 0
+        except ValueError:
+            print("Por favor otorgue una respuesta válida")
+        else:
+            if homepage_action not in [0, 1]:
+                print("Por favor otorgue una respuesta válida")
 
 
-        #Darse de alta por primera vez
+        # Darse de alta por primera vez
         if homepage_action == 1:
             new_user = str(input("Introduzca su futuro nombre de usuario:\n"))
             new_password = str(input("Introduzca su nueva contraseña:\n"))
@@ -79,12 +89,13 @@ while exit != 1:
                         json.dump(usuarios, file, indent=2)
 
 
-        #Iniciar seión en una cuenta ya existente
+        # Iniciar sesión en una cuenta ya existente
         elif homepage_action == 0:
             current_user = str(input("Introduzca su nombre de usuario:\n"))
             current_password = str(input("Introduzca su contraseña:\n"))
             with open("usuarios.json", "r", encoding="utf-8", newline="") as file:
                 usuarios = json.load(file)
+
             flag = 0
             for i in usuarios:
                 if current_user == i["_username"]:
@@ -109,23 +120,32 @@ while exit != 1:
                         flag = 0
                     else:
                         flag = 1
+
             if flag == 0:
-                print("Sus credenciales son incorrentas")
+                print("Sus credenciales son incorrectas")
+
             else:
                 signed_up = True
 
-        #respuesta distinta a 1 o 0
-        else:
-            print("Por favor otorgue una respuesta válida")
 
-
-    #Bucle que pregunta al usuario que servicio desea utilizar siempre que exista una cuenta actualmente abierta
+    # Bucle que pregunta al usuario que servicio desea utilizar siempre que exista una cuenta actualmente abierta
     while signed_up == True:
-        account_action = int(input("¿Qué desea hacer?"
-                                   "(0=Comprobar mensajes/1=Enviar mensajes/2=Cerrar sesión):\n"))
+        account_action = -1
 
+        while account_action != 0 and account_action != 1 and account_action != 2:
+            # Preguntar al usuario por la acción que desea realizar
+            try:
+                account_action = int(input("¿Qué desea hacer?"
+                                           "(0=Comprobar mensajes/1=Enviar mensajes/2=Cerrar sesión):\n"))
 
-        #Enviar mensaje a otro usuario
+            # Obtención de una respuesta distinta a 2, 1 o 0
+            except ValueError:
+                print("Por favor otorgue una respuesta válida")
+            else:
+                if account_action not in [0, 1, 2]:
+                    print("Por favor otorgue una respuesta válida")
+
+        # Enviar mensaje a otro usuario
         if account_action == 1:
             recipient_user = str(input("¿A quién desea enviar mensajes?\n"))
             with open("usuarios.json", "r", encoding="utf-8", newline="") as file:
@@ -163,7 +183,7 @@ while exit != 1:
                         message_to_store = chacha.encrypt(nonce, introduced_message, aad)
 
                         print(message_to_store)
-                        #stored_date = base64.b64encode(dt_string).decode("utf-8")
+                        # stored_date = base64.b64encode(dt_string).decode("utf-8")
 
                         nonce_to_store = base64.b64encode(nonce).decode("utf-8")
                         message_to_store = base64.b64encode(message_to_store).decode("utf-8")
@@ -179,19 +199,17 @@ while exit != 1:
                 print("Ese usuario no existe")
 
 
-        #Comprobar mensajes de otro usuario en cuestión
+        # Comprobar mensajes de otro usuario en cuestión
         elif account_action == 0:
-            checked_user = str(input("¿De quién desea ver los mensajes recibidos?\n"))
             with open("usuarios.json", "r", encoding="utf-8", newline="") as file:
                 usuarios = json.load(file)
 
-            flag = 0
             for i in usuarios:
                 if current_user == i["_username"]:
 
-                    for j in i:
-                        if checked_user == j:
-                            flag = 1
+                    for j in i.keys():
+                        if j != "_username" and j != "_password":
+                            print("De " + j + ":" + "\n")
 
                             for k in i[j].keys():
                                 stored_nonce = i[j][k][0]
@@ -209,26 +227,45 @@ while exit != 1:
                                 showed_message = str(chacha.decrypt(stored_nonce, stored_message, stored_aad))[2:-1]
                                 print(k + ": " + showed_message + "\n")
 
-            if flag == 0:
-                print("No tiene mensajes de este usuario o el usuario no existe")
-
 
         elif account_action == 2:
             signed_up = False
 
-
-        else:
-            print("Por favor otorge una respuesta válida")
-
+        print(signed_up)
         if signed_up == True:
-            signed_up = int(input("¿Desea mantener la sesión abierta?"
-                              " (1=Afirmación/0=Negación):\n"))
-            signed_up = bool(signed_up)
+            signed_up = -1
+            while signed_up != 1 and signed_up != 0:
+                # Preguntar al usuario por la acción que desea realizar
+                try:
+                    signed_up = int(input("¿Desea mantener la sesión abierta?"
+                                          " (1=Afirmación/0=Negación):\n"))
+
+                # Obtención de una respuesta distinta a 1 o 0
+                except ValueError:
+                    print("Por favor otorgue una respuesta válida")
+                else:
+                    if signed_up not in [0, 1]:
+                        print("Por favor otorgue una respuesta válida")
+
+        signed_up = bool(signed_up)
+
         print(signed_up)
 
 
-    exit = int(input("¿Desea salir de la aplicación?"
-                     " (1=Afirmación/0=Negación):\n"))
+    exit = -1
+    while exit != 0 and exit != 1:
+        # Preguntar al usuario por la acción que desea realizar
+        try:
+            exit = int(input("¿Desea salir de la aplicación?"
+                             " (1=Afirmación/0=Negación):\n"))
+
+        # Obtención de una respuesta distinta a 1 o 0
+        except ValueError:
+            print("Por favor otorgue una respuesta válida")
+        else:
+            if exit not in [0, 1]:
+                print("Por favor otorgue una respuesta válida")
+
     print(exit)
 
 
