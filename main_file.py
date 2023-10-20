@@ -7,13 +7,24 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
+USUARIOS_JSON = "usuarios.json"
+CLAVES_MENSAJES_JSON = "claves_mensajes.json"
 
-#Clase empleada para introducir los datos de un nuevo usuario en la bade de datos
+#Esta clave deberia estar guardada a salvo en otro
+#espacio más seguro, pero por el momento la mantendremos aqui
+CLAVE_MAESTRA = ChaCha20Poly1305.generate_key()
+
+
+#Clase empleada para introducir los datos de un nuevo usuario en la base de datos
 class user_record:
     def __init__(self, introduced_username, introduced_password, employed_salt):
         self._username = introduced_username
         self._password = [introduced_password, employed_salt]
 
+class messaging_key_entry:
+    def __init__(self, user1, user2, nonce, key, aad):
+        self._involved_users = [user1, user2]
+        self._key = [nonce, key, aad]
 
 class message:
     def __init__(self, sender, recipient, content):
@@ -24,6 +35,8 @@ class message:
 
 exit = 0
 usuarios = []
+claves_mensajes = []
+
 
 now = datetime.now()
 dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
@@ -58,7 +71,7 @@ while exit != 1:
                 homepage_action = 2
                 print("Las contraseñas no coinciden")
             else:
-                with open("usuarios.json", "r", encoding="utf-8", newline="") as file:
+                with open(USUARIOS_JSON, "r", encoding="utf-8", newline="") as file:
                     usuarios = json.load(file)
                 flag = 0
 
@@ -85,7 +98,7 @@ while exit != 1:
 
                     new_user = user_record(new_user, stored_key, stored_salt)
                     usuarios.append(new_user.__dict__)
-                    with open("usuarios.json", "w", encoding="utf-8", newline="") as file:
+                    with open(USUARIOS_JSON, "w", encoding="utf-8", newline="") as file:
                         json.dump(usuarios, file, indent=2)
 
 
@@ -93,7 +106,7 @@ while exit != 1:
         elif homepage_action == 0:
             current_user = str(input("Introduzca su nombre de usuario:\n"))
             current_password = str(input("Introduzca su contraseña:\n"))
-            with open("usuarios.json", "r", encoding="utf-8", newline="") as file:
+            with open(USUARIOS_JSON, "r", encoding="utf-8", newline="") as file:
                 usuarios = json.load(file)
 
             flag = 0
@@ -148,7 +161,7 @@ while exit != 1:
         # Enviar mensaje a otro usuario
         if account_action == 1:
             recipient_user = str(input("¿A quién desea enviar mensajes?\n"))
-            with open("usuarios.json", "r", encoding="utf-8", newline="") as file:
+            with open(USUARIOS_JSON, "r", encoding="utf-8", newline="") as file:
                 usuarios = json.load(file)
             flag = 0
             for i in usuarios:
@@ -157,6 +170,9 @@ while exit != 1:
 
             if flag == 1:
                 first_message = True
+
+                with open(CLAVES_MENSAJES_JSON, "r", encoding="utf-8", newline="") as keysFile:
+                    claves_mensajes = json.load(keysFile)
 
                 for i in usuarios:
                     if recipient_user == i["_username"]:
@@ -167,6 +183,22 @@ while exit != 1:
 
                         if first_message == True:
                             i[current_user] = {}
+                            key = ChaCha20Poly1305.generate_key()
+
+                            aad = b"authenticated but unencrypted data"
+                            chachaMaestro = ChaCha20Poly1305(CLAVE_MAESTRA)
+                            nonce = os.urandom(12)
+
+                            key = chachaMaestro.encrypt(nonce, key, aad)
+                            key_to_store = base64.b64encode(key).decode("utf-8")
+                            nonce_to_store = base64.b64encode(nonce).decode("utf-8")
+                            aad_to_store = base64.b64encode(aad).decode("utf-8")
+
+                            new_messaging_key = messaging_key_entry(current_user, recipient_user,
+                                                                    nonce_to_store, key_to_store, aad_to_store)
+                            claves_mensajes.append(new_messaging_key.__dict__)
+                            with open(CLAVES_MENSAJES_JSON, "w", encoding="utf-8", newline="") as keysFile:
+                                json.dump(claves_mensajes, keysFile, indent=2)
 
 
                         print(i[current_user])
@@ -176,8 +208,18 @@ while exit != 1:
                         introduced_message = str(input("Escriba el mensaje:\n"))
 
                         introduced_message = bytes(introduced_message, encoding="utf-8")
+
+                        for k in claves_mensajes:
+                            if current_user in k["_involved_users"] and recipient_user in k["_involved_users"]:
+                                stored_key = base64.b64decode(k["_key"][1].encode("utf-8"))
+
+                                aadMaestro = base64.b64decode(k["_key"][2].encode("utf-8"))
+                                chachaMaestro = ChaCha20Poly1305(CLAVE_MAESTRA)
+                                nonceMaestro = base64.b64decode(k["_key"][0].encode("utf-8"))
+
+                                key = chachaMaestro.decrypt(nonceMaestro, stored_key, aadMaestro)
+
                         aad = b"authenticated but unencrypted data"
-                        key = ChaCha20Poly1305.generate_key()
                         chacha = ChaCha20Poly1305(key)
                         nonce = os.urandom(12)
                         message_to_store = chacha.encrypt(nonce, introduced_message, aad)
@@ -188,11 +230,10 @@ while exit != 1:
                         nonce_to_store = base64.b64encode(nonce).decode("utf-8")
                         message_to_store = base64.b64encode(message_to_store).decode("utf-8")
                         aad_to_store = base64.b64encode(aad).decode("utf-8")
-                        key_to_store = base64.b64encode(key).decode("utf-8")
                         print(message_to_store)
 
-                        i[current_user][dt_string] = [nonce_to_store, message_to_store, aad_to_store, key_to_store]
-                        with open("usuarios.json", "w", encoding="utf-8", newline="") as file:
+                        i[current_user][dt_string] = [nonce_to_store, message_to_store, aad_to_store]
+                        with open(USUARIOS_JSON, "w", encoding="utf-8", newline="") as file:
                             json.dump(usuarios, file, indent=2)
 
             else:
@@ -201,8 +242,10 @@ while exit != 1:
 
         # Comprobar mensajes de otro usuario en cuestión
         elif account_action == 0:
-            with open("usuarios.json", "r", encoding="utf-8", newline="") as file:
+            with open(USUARIOS_JSON, "r", encoding="utf-8", newline="") as file:
                 usuarios = json.load(file)
+            with open(CLAVES_MENSAJES_JSON, "r", encoding="utf-8", newline="") as keysFile:
+                claves_mensajes = json.load(keysFile)
 
             for i in usuarios:
                 if current_user == i["_username"]:
@@ -210,6 +253,17 @@ while exit != 1:
                     for j in i.keys():
                         if j != "_username" and j != "_password":
                             print("De " + j + ":" + "\n")
+
+                            for h in claves_mensajes:
+                                if current_user in h["_involved_users"] and j in h["_involved_users"]:
+                                    stored_key = base64.b64decode(h["_key"][1].encode("utf-8"))
+
+                                    aadMaestro = base64.b64decode(h["_key"][2].encode("utf-8"))
+                                    chachaMaestro = ChaCha20Poly1305(CLAVE_MAESTRA)
+                                    nonceMaestro = base64.b64decode(h["_key"][0].encode("utf-8"))
+
+                                    key = chachaMaestro.decrypt(nonceMaestro, stored_key, aadMaestro)
+
 
                             for k in i[j].keys():
                                 stored_nonce = i[j][k][0]
@@ -220,9 +274,7 @@ while exit != 1:
                                 stored_message = base64.b64decode(stored_message.encode("utf-8"))
                                 stored_aad = base64.b64decode(stored_aad.encode("utf-8"))
 
-                                stored_key = i[j][k][3]
-                                stored_key = base64.b64decode(stored_key.encode("utf-8"))
-                                chacha = ChaCha20Poly1305(stored_key)
+                                chacha = ChaCha20Poly1305(key)
 
                                 showed_message = str(chacha.decrypt(stored_nonce, stored_message, stored_aad))[2:-1]
                                 print(k + ": " + showed_message + "\n")
@@ -267,8 +319,3 @@ while exit != 1:
                 print("Por favor otorgue una respuesta válida")
 
     print(exit)
-
-
-
-
-
