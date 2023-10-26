@@ -1,1 +1,35 @@
-[]
+[
+  {
+    "_involved_users": [
+      "c",
+      "a"
+    ],
+    "_key": [
+      "oMawJzppZOInCXJa",
+      "ag4nuDgQ/xwMW3Dp20vrt2dbJfY19o4NNM+StJiydY98RYxfUE8U88ishMS/oqbF",
+      "YXV0aGVudGljYXRlZCBidXQgdW5lbmNyeXB0ZWQgZGF0YQ=="
+    ]
+  },
+  {
+    "_involved_users": [
+      "c",
+      "b"
+    ],
+    "_key": [
+      "KgH6HLPMOeaYUau/",
+      "Uc64bLkl/G8feeh6aJRypTb6laiMesNEm2cSOHVnwgN/EP5zk+DTb6bA7SHSupk5",
+      "YXV0aGVudGljYXRlZCBidXQgdW5lbmNyeXB0ZWQgZGF0YQ=="
+    ]
+  },
+  {
+    "_involved_users": [
+      "b",
+      "a"
+    ],
+    "_key": [
+      "J6iv3hH2qJEZhVON",
+      "+1jki7iAyHVSABlCs4emcJYsgC9JYsMVbdUqmXlAOpOedDWvVc8hC9d7rZvs8Wok",
+      "YXV0aGVudGljYXRlZCBidXQgdW5lbmNyeXB0ZWQgZGF0YQ=="
+    ]
+  }
+]

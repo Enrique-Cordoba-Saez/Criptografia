@@ -1,0 +1,6 @@
+Para emplear el programa tan solo es necesario ejecutar el archivo python "main_file.py", tras lo cual se nos empiezan a presentar instrucciones en la consola de ejecución o terminal a las cuales deberemos responder acorde al código numérico que explica cada una de ellas.
+La aplicación hace uso de dos archivos json "usuarios.json" y "claves_mensajes.json" cuya localización con respecto a "main_file.py"
+ha sido especificada en las variables globales "USUARIOS_JSON" y "CLAVES_MENSAJES_JSON" que se encuentran al inicio de "main_file.py" (si bien pueden ser modificadas si se desease).
+Estos archivos se dejarán vacíos en la entrega en pos de mayor claridad por lo que antes de la lectura y envío de mensajes será necesaria la creación de al menos dos usuarios. 
+Puesto que el sistema aun no cuenta con mecanismo de recuperación de contraseñas es recomendable utilizar contraseñas cortas y/o   sencillas.
+También es imprescindible tener instalado en nuestro IDE el paquete 'cryptography', que puede ser obtenido escribiendo el comando "pip install cryptography".
