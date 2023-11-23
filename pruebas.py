@@ -413,7 +413,7 @@ while exit_app != 1:
                             AC1_clave_publica = AC1_certificate.public_key()
 
                             try:
-                                AC1_clave_publica.verify(signature_toVerify, AC1_certificate.tbs_certificate_bytes,
+                                AC1_clave_publica.verify(signature_toVerify, certificate.tbs_certificate_bytes,
                                                          certificate.signature_algorithm_parameters,
                                                          certificate.signature_hash_algorithm)
                             except cryptography.exceptions.InvalidSignature as error:
