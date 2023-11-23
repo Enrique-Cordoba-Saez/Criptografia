@@ -1,0 +1,2 @@
+cd C:\Users\Kry0m\Desktop\8223_E2_app\AC1
+openssl ca -in ./solicitudes/1req.pem -notext -config ./openssl_AC1.cnf

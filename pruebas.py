@@ -1,19 +1,28 @@
 # pylint: skip-file
 import json
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 import os
 import base64
 import cryptography
+import abc
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.asymmetric import ed25519
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.serialization import KeySerializationEncryption, Encoding, PrivateFormat
+from cryptography.hazmat.primitives.hashes import SHA256
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import padding
 
 """Estas dos constantes se emplean 
 para la localización de lo archivos JSON"""
-CLAVES_PUBLICAS_JSON = "claves_publicas_firmas.json"
-USUARIOS_JSON = "usuarios.json"
-CLAVES_MENSAJES_JSON = "claves_mensajes.json"
+CLAVES_PUBLICAS_JSON = "JSON/claves_publicas_firmas.json"
+USUARIOS_JSON = "JSON/usuarios.json"
+CLAVES_MENSAJES_JSON = "JSON/claves_mensajes.json"
 
 """Esta clave debería estar guardada a salvo en otro
 espacio más seguro, pero por el momento la mantendremos aquí"""
@@ -118,7 +127,57 @@ while exit_app != 1:
                     public_sign_key = public_sign_key.public_bytes_raw()
                     stored_public_sign_key = base64.b64encode(public_sign_key).decode("utf-8")
 
-                    # Cifrado de la clave de firma privada
+                    """--------------------------------------------------------------------
+                    Creación de un certificado y su petición de firma para la autoridad AC1
+                    --------------------------------------------------------------------"""
+                    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+                        # Información sobre el usuario.
+                        x509.NameAttribute(NameOID.COUNTRY_NAME, "ES"),
+                        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "MADRID"),
+                        x509.NameAttribute(NameOID.LOCALITY_NAME, "LEGANES"),
+                        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "UC3M"),
+                        x509.NameAttribute(NameOID.COMMON_NAME, 'Usuario: ' + str(new_user)),
+                        x509.NameAttribute(NameOID.EMAIL_ADDRESS, str(new_user) + '@uc3m.alumnos.es')
+                    ])).add_extension(
+                        x509.SubjectAlternativeName([
+                            # Describe what sites we want this certificate for.
+                            x509.DNSName("mysite.com"),
+                            x509.DNSName("www.mysite.com"),
+                            x509.DNSName("subdomain.mysite.com"),
+                        ]),
+                        critical=False,
+                    ).sign(ed25519.Ed25519PrivateKey.from_private_bytes(private_sign_key), None)
+
+                    # Extracción de la clave privada de la autoridad
+                    with open("AC1/privado/ca1key.pem", "rb") as authkey:
+                        authority_private_key = serialization.load_pem_private_key(authkey.read(),
+                                                                                   password=b'claveAC1', )
+
+                    # Creación de un directorio para depositar el certificado y clave del nuevo usuario
+                    os.mkdir(str(new_user))
+                    with open(str(new_user) + "/" + str(new_user) + "key.pem", "wb") as usu:
+                        psk = ed25519.Ed25519PrivateKey.from_private_bytes(private_sign_key)
+                        usu.write(psk.private_bytes(Encoding.PEM, PrivateFormat.PKCS8,
+                                                    serialization.BestAvailableEncryption(bytes('clave' + str(new_user),
+                                                                                                encoding="utf-8"))))
+                    # Envio de la solicitud de firma del certificado del nuevo usuario a la autoridad
+                    with open("AC1/solicitudes/" + str(new_user) + "req.pem", "wb") as f:
+                        f.write(csr.public_bytes(serialization.Encoding.PEM))
+                    with open("AC1/serial", "r") as serial:
+                        NUMERO_SERIAL_DE_LA_AUTORIDAD = serial.read().strip()
+                        print("AC1/nuevoscerts/" + NUMERO_SERIAL_DE_LA_AUTORIDAD + ".pem")
+
+                    print("Se esta procesando su certificación")
+                    while not os.path.isfile("AC1/nuevoscerts/" + NUMERO_SERIAL_DE_LA_AUTORIDAD + ".pem"):
+                        pass
+                    time.sleep(1)
+                    os.rename("AC1/nuevoscerts/" + NUMERO_SERIAL_DE_LA_AUTORIDAD + ".pem", str(new_user) + "/"
+                              + str(new_user) + "cert.pem")
+                    print("Usted ha sido verificado con éxito")
+
+                    """--------------------------------
+                    Cifrado de la clave de firma privada
+                    ---------------------------------"""
                     aad = b"authenticated but unencrypted data"
                     chachaMaestro = ChaCha20Poly1305(CLAVE_MAESTRA)
                     nonce = os.urandom(12)
@@ -131,6 +190,7 @@ while exit_app != 1:
                     # Introducimos una nueva entrada del almacén de claves de firma pública
                     with open(CLAVES_PUBLICAS_JSON, "r", encoding="utf-8", newline="") as signatureFile:
                         claves_publicas = json.load(signatureFile)
+
                     entrada = public_signature_key_entry(new_user, stored_public_sign_key)
                     claves_publicas.append(entrada.__dict__)
                     with open(CLAVES_PUBLICAS_JSON, "w", encoding="utf-8", newline="") as signatureFile:
@@ -276,7 +336,7 @@ while exit_app != 1:
                             if w["_username"] == current_user:
                                 print(current_user)
                                 decoded_sender_private_key_nonce = base64.b64decode(
-                                                                    w["_private_key"][0].encode("utf-8"))
+                                    w["_private_key"][0].encode("utf-8"))
                                 decoded_sender_private_key = base64.b64decode(w["_private_key"][1].encode("utf-8"))
                                 decoded_sender_private_key_aad = base64.b64decode(w["_private_key"][2].encode("utf-8"))
 
@@ -288,7 +348,6 @@ while exit_app != 1:
                                 print(sender_private_key)
                                 print(type(message_to_store))
                                 signed_message_to_store = sender_private_key.sign(message_to_store)
-
 
                         if warning == 1:
                             i.update({current_user: {}})
@@ -335,6 +394,35 @@ while exit_app != 1:
                                     clave_publica_firma = ed25519.Ed25519PublicKey.from_public_bytes(
                                         clave_publica_firma)
 
+                            """Comprobamos la autenticidad del certificado del emisor
+                                                             consultado a la autoridad AC1"""
+                            # Certificado del emisor
+                            with open(str(j) + "/" + str(j) + "cert.pem", "rb") as certFile:
+                                certificate_in_bytes = certFile.read()
+                                certificate = x509.load_pem_x509_certificate(certificate_in_bytes)
+                                print(certificate)
+
+                            # También debemos consultar el certificado de la autoridad
+                            with open("AC1/ac1cert.pem", "rb") as AC1File:
+                                AC1_certificate_in_bytes = AC1File.read()
+                                AC1_certificate = x509.load_pem_x509_certificate(AC1_certificate_in_bytes)
+
+                            """Verificamos la firma del certificado asociado al emisor mediante la clave 
+                            pública de la autoridad"""
+                            signature_toVerify = certificate.signature
+                            AC1_clave_publica = AC1_certificate.public_key()
+
+                            try:
+                                AC1_clave_publica.verify(signature_toVerify, AC1_certificate.tbs_certificate_bytes,
+                                                         certificate.signature_algorithm_parameters,
+                                                         certificate.signature_hash_algorithm)
+                            except cryptography.exceptions.InvalidSignature as error:
+                                print("Este usuario puede no ser quien dice ser")
+                            else:
+                                print("Este usuario ha sido certificado por la autoridad central")
+
+
+
                             # Extraemos la clave simétrica de cifrado de las comunicaciones entre
                             # el emisor "j" y el receptor "current_user"
                             for h in claves_mensajes:
@@ -361,16 +449,15 @@ while exit_app != 1:
 
                                 chacha = ChaCha20Poly1305(key)
 
-                                # Comprobamos la veracidad del mensaje mediante la firma pública del emisor
-                                print(clave_publica_firma)
+                                """Comprobamos ahora la veracidad del mensaje mediante la clave pública 
+                                de firma del emisor"""
+
                                 try:
                                     clave_publica_firma.verify(stored_signed_message, stored_message)
                                 except cryptography.exceptions.InvalidSignature as error:
                                     print("El siguiente mensaje puede no provenir del emisor")
                                 else:
                                     print("El siguiente mensaje es verídico")
-
-
 
                                 showed_message = str(chacha.decrypt(stored_nonce, stored_message, stored_aad))[2:-1]
                                 print(k + ": " + showed_message)

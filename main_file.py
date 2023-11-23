@@ -1,3 +1,4 @@
+# pylint: skip-file
 import json
 from datetime import datetime
 import os
@@ -5,9 +6,16 @@ import base64
 import cryptography
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+from cryptography.hazmat.primitives.asymmetric import ed25519
+# from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
+
 
 """Estas dos constantes se emplean 
 para la localización de lo archivos JSON"""
+CLAVES_PUBLICAS_JSON = "claves_publicas_firmas.json"
 USUARIOS_JSON = "usuarios.json"
 CLAVES_MENSAJES_JSON = "claves_mensajes.json"
 
@@ -18,9 +26,11 @@ CLAVE_MAESTRA = b'_e\xe6\xdaJP+VH)C\xc0\x17\xcc\xc5]2\xc7\xe9\xde\x85[\xa2\xdb\x
 
 # Clase empleada para introducir los datos de un nuevo usuario en la base de datos
 class user_record:
-    def __init__(self, introduced_username, introduced_password, employed_salt):
+    def __init__(self, introduced_username, introduced_password, employed_salt,
+                 private_nonce, private_key, private_aad):
         self._username = introduced_username
         self._password = [introduced_password, employed_salt]
+        self._private_key = [private_nonce, private_key, private_aad]
 
 
 # Clase empleada para introducir los datos de un nuevo intercambio de mensajes entre usuarios en la base de datos
@@ -30,12 +40,19 @@ class messaging_key_entry:
         self._key = [entry_nonce, entry_key, entry_aad]
 
 
+class public_signature_key_entry:
+    def __init__(self, introduced_username, introduced_key):
+        self._username = introduced_username
+        self._signature_key = introduced_key
+
+
 # Variable que indica si la app está en ejecución (1) o no (0)
 exit_app = 0
 """Listas de Python empleadas para almacenar temporalmente el contenido
 de los archivos JSON"""
 usuarios = []
 claves_mensajes = []
+claves_publicas = []
 
 # Impresión en la consola del tiempo actual al iniciar el programa
 now = datetime.now()
@@ -98,7 +115,34 @@ while exit_app != 1:
                     stored_salt = base64.b64encode(salt).decode("utf-8")
                     stored_key = base64.b64encode(key).decode("utf-8")
 
-                    new_user = user_record(new_user, stored_key, stored_salt)
+                    # Ahora generamos las claves de firma privada y pública
+                    private_sign_key = ed25519.Ed25519PrivateKey.generate()
+                    public_sign_key = private_sign_key.public_key()
+                    private_sign_key = private_sign_key.private_bytes_raw()
+                    public_sign_key = public_sign_key.public_bytes_raw()
+                    stored_public_sign_key = base64.b64encode(public_sign_key).decode("utf-8")
+
+                    # Cifrado de la clave de firma privada
+                    aad = b"authenticated but unencrypted data"
+                    chachaMaestro = ChaCha20Poly1305(CLAVE_MAESTRA)
+                    nonce = os.urandom(12)
+
+                    private_sign_key = chachaMaestro.encrypt(nonce, private_sign_key, aad)
+                    private_sign_key_to_store = base64.b64encode(private_sign_key).decode("utf-8")
+                    sign_nonce_to_store = base64.b64encode(nonce).decode("utf-8")
+                    sign_aad_to_store = base64.b64encode(aad).decode("utf-8")
+
+                    # Introducimos una nueva entrada del almacén de claves de firma pública
+                    with open(CLAVES_PUBLICAS_JSON, "r", encoding="utf-8", newline="") as signatureFile:
+                        claves_publicas = json.load(signatureFile)
+                    entrada = public_signature_key_entry(new_user, stored_public_sign_key)
+                    claves_publicas.append(entrada.__dict__)
+                    with open(CLAVES_PUBLICAS_JSON, "w", encoding="utf-8", newline="") as signatureFile:
+                        json.dump(claves_publicas, signatureFile, indent=2)
+
+                    # Aquí creamos la entrada del usuario en la base de datos de usuarios
+                    new_user = user_record(new_user, stored_key, stored_salt, sign_nonce_to_store,
+                                           private_sign_key_to_store, sign_aad_to_store)
                     usuarios.append(new_user.__dict__)
                     with open(USUARIOS_JSON, "w", encoding="utf-8", newline="") as file:
                         json.dump(usuarios, file, indent=2)
@@ -211,7 +255,7 @@ while exit_app != 1:
                                         if b == current_user:
                                             warning = 0
 
-                        """Redactar y guardar mensaje en la entrada del usuario receptor dentro de la base de datos"""
+                        """Redactar y cifrar el mensaje"""
                         now = datetime.now()
                         dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
                         introduced_message = str(input("Escriba el mensaje:\n"))
@@ -231,14 +275,35 @@ while exit_app != 1:
                         nonce = os.urandom(12)
                         message_to_store = chacha.encrypt(nonce, introduced_message, aad)
 
-                        nonce_to_store = base64.b64encode(nonce).decode("utf-8")
-                        message_to_store = base64.b64encode(message_to_store).decode("utf-8")
-                        aad_to_store = base64.b64encode(aad).decode("utf-8")
+                        # Firma del mensaje a enviar con clave privada
+                        for w in usuarios:
+                            if w["_username"] == current_user:
+                                print(current_user)
+                                decoded_sender_private_key_nonce = base64.b64decode(
+                                                                    w["_private_key"][0].encode("utf-8"))
+                                decoded_sender_private_key = base64.b64decode(w["_private_key"][1].encode("utf-8"))
+                                decoded_sender_private_key_aad = base64.b64decode(w["_private_key"][2].encode("utf-8"))
+
+                                chachaMaestro_firma = ChaCha20Poly1305(CLAVE_MAESTRA)
+                                sender_private_key = chachaMaestro_firma.decrypt(
+                                    decoded_sender_private_key_nonce, decoded_sender_private_key,
+                                    decoded_sender_private_key_aad)
+                                sender_private_key = ed25519.Ed25519PrivateKey.from_private_bytes(sender_private_key)
+                                print(sender_private_key)
+                                print(type(message_to_store))
+                                signed_message_to_store = sender_private_key.sign(message_to_store)
 
                         if warning == 1:
                             i.update({current_user: {}})
 
-                        i[current_user][dt_string] = [nonce_to_store, message_to_store, aad_to_store]
+                        """Aquí se almacena el mensaje dentro de la base de datos json"""
+                        nonce_to_store = base64.b64encode(nonce).decode("utf-8")
+                        message_to_store = base64.b64encode(message_to_store).decode("utf-8")
+                        aad_to_store = base64.b64encode(aad).decode("utf-8")
+                        signed_message_to_store = base64.b64encode(signed_message_to_store).decode("utf-8")
+
+                        i[current_user][dt_string] = [nonce_to_store, message_to_store, aad_to_store,
+                                                      signed_message_to_store]
                         with open(USUARIOS_JSON, "w", encoding="utf-8", newline="") as file:
                             json.dump(usuarios, file, indent=2)
 
@@ -251,6 +316,8 @@ while exit_app != 1:
                 usuarios = json.load(file)
             with open(CLAVES_MENSAJES_JSON, "r", encoding="utf-8", newline="") as keysFile:
                 claves_mensajes = json.load(keysFile)
+            with open(CLAVES_PUBLICAS_JSON, "r", encoding="utf-8", newline="") as signFile:
+                claves_publicas = json.load(signFile)
 
             flag = 0
             for i in usuarios:
@@ -259,10 +326,20 @@ while exit_app != 1:
                     # Repetir el proceso por cada otro usuario que le ha enviado mensajes
                     # al que está haciendo uso de la aplicación
                     for j in i.keys():
-                        if j != "_username" and j != "_password":
+                        if j != "_username" and j != "_password" and j != "_private_key":
                             flag = 1
                             print("De " + j + ":")
 
+                            # Extraemos la clave pública del emisor "j"
+                            for q in claves_publicas:
+                                if q["_username"] == j:
+                                    clave_publica_firma = q["_signature_key"]
+                                    clave_publica_firma = base64.b64decode(clave_publica_firma.encode("utf-8"))
+                                    clave_publica_firma = ed25519.Ed25519PublicKey.from_public_bytes(
+                                        clave_publica_firma)
+
+                            # Extraemos la clave simétrica de cifrado de las comunicaciones entre
+                            # el emisor "j" y el receptor "current_user"
                             for h in claves_mensajes:
                                 if current_user in h["_involved_users"] and j in h["_involved_users"]:
                                     stored_key = base64.b64decode(h["_key"][1].encode("utf-8"))
@@ -273,16 +350,28 @@ while exit_app != 1:
 
                                     key = chachaMaestro.decrypt(nonceMaestro, stored_key, aadMaestro)
 
+                            # Repetir proceso por cada mensaje del emisor "j"
                             for k in i[j].keys():
                                 stored_nonce = i[j][k][0]
                                 stored_message = i[j][k][1]
                                 stored_aad = i[j][k][2]
+                                stored_signed_message = i[j][k][3]
 
                                 stored_nonce = base64.b64decode(stored_nonce.encode("utf-8"))
                                 stored_message = base64.b64decode(stored_message.encode("utf-8"))
                                 stored_aad = base64.b64decode(stored_aad.encode("utf-8"))
+                                stored_signed_message = base64.b64decode(stored_signed_message.encode("utf-8"))
 
                                 chacha = ChaCha20Poly1305(key)
+
+                                # Comprobamos la veracidad del mensaje mediante la firma pública del emisor
+                                print(clave_publica_firma)
+                                try:
+                                    clave_publica_firma.verify(stored_signed_message, stored_message)
+                                except cryptography.exceptions.InvalidSignature as error:
+                                    print("El siguiente mensaje puede no provenir del emisor")
+                                else:
+                                    print("El siguiente mensaje es verídico")
 
                                 showed_message = str(chacha.decrypt(stored_nonce, stored_message, stored_aad))[2:-1]
                                 print(k + ": " + showed_message)
