@@ -1,2 +1,0 @@
-V	241122111405Z		01	unknown	/C=ES/ST=MADRID/O=UC3M/CN=Usuario: 1/emailAddress=1@uc3m.alumnos.es
-V	241122111537Z		02	unknown	/C=ES/ST=MADRID/O=UC3M/CN=Usuario: 2/emailAddress=2@uc3m.alumnos.es

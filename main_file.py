@@ -20,14 +20,12 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 """Estas dos constantes se emplean 
 para la localización de lo archivos JSON"""
-CLAVES_PUBLICAS_JSON = "JSON/claves_publicas_firmas.json"
 USUARIOS_JSON = "JSON/usuarios.json"
 CLAVES_MENSAJES_JSON = "JSON/claves_mensajes.json"
 
 """Esta clave debería estar guardada a salvo en otro
 espacio más seguro, pero por el momento la mantendremos aquí"""
 CLAVE_MAESTRA = b'_e\xe6\xdaJP+VH)C\xc0\x17\xcc\xc5]2\xc7\xe9\xde\x85[\xa2\xdb\xb8")\x94\x97\xc0p\x94'
-
 
 # Clase empleada para introducir los datos de un nuevo usuario en la base de datos
 class user_record:
@@ -45,19 +43,12 @@ class messaging_key_entry:
         self._key = [entry_nonce, entry_key, entry_aad]
 
 
-class public_signature_key_entry:
-    def __init__(self, introduced_username, introduced_key):
-        self._username = introduced_username
-        self._signature_key = introduced_key
-
-
 # Variable que indica si la app está en ejecución (1) o no (0)
 exit_app = 0
 """Listas de Python empleadas para almacenar temporalmente el contenido
 de los archivos JSON"""
 usuarios = []
 claves_mensajes = []
-claves_publicas = []
 
 # Impresión en la consola del tiempo actual al iniciar el programa
 now = datetime.now()
@@ -122,10 +113,7 @@ while exit_app != 1:
 
                     # Ahora generamos las claves de firma privada y pública
                     private_sign_key = ed25519.Ed25519PrivateKey.generate()
-                    public_sign_key = private_sign_key.public_key()
                     private_sign_key = private_sign_key.private_bytes_raw()
-                    public_sign_key = public_sign_key.public_bytes_raw()
-                    stored_public_sign_key = base64.b64encode(public_sign_key).decode("utf-8")
 
                     """--------------------------------------------------------------------
                     Creación de un certificado y su petición de firma para la autoridad AC1
@@ -186,15 +174,6 @@ while exit_app != 1:
                     private_sign_key_to_store = base64.b64encode(private_sign_key).decode("utf-8")
                     sign_nonce_to_store = base64.b64encode(nonce).decode("utf-8")
                     sign_aad_to_store = base64.b64encode(aad).decode("utf-8")
-
-                    # Introducimos una nueva entrada del almacén de claves de firma pública
-                    with open(CLAVES_PUBLICAS_JSON, "r", encoding="utf-8", newline="") as signatureFile:
-                        claves_publicas = json.load(signatureFile)
-
-                    entrada = public_signature_key_entry(new_user, stored_public_sign_key)
-                    claves_publicas.append(entrada.__dict__)
-                    with open(CLAVES_PUBLICAS_JSON, "w", encoding="utf-8", newline="") as signatureFile:
-                        json.dump(claves_publicas, signatureFile, indent=2)
 
                     # Aquí creamos la entrada del usuario en la base de datos de usuarios
                     new_user = user_record(new_user, stored_key, stored_salt, sign_nonce_to_store,
@@ -371,8 +350,6 @@ while exit_app != 1:
                 usuarios = json.load(file)
             with open(CLAVES_MENSAJES_JSON, "r", encoding="utf-8", newline="") as keysFile:
                 claves_mensajes = json.load(keysFile)
-            with open(CLAVES_PUBLICAS_JSON, "r", encoding="utf-8", newline="") as signFile:
-                claves_publicas = json.load(signFile)
 
             flag = 0
             for i in usuarios:
@@ -383,15 +360,6 @@ while exit_app != 1:
                     for j in i.keys():
                         if j != "_username" and j != "_password" and j != "_private_key":
                             flag = 1
-
-
-                            # Extraemos la clave pública del emisor "j"
-                            for q in claves_publicas:
-                                if q["_username"] == j:
-                                    clave_publica_firma = q["_signature_key"]
-                                    clave_publica_firma = base64.b64decode(clave_publica_firma.encode("utf-8"))
-                                    clave_publica_firma = ed25519.Ed25519PublicKey.from_public_bytes(
-                                        clave_publica_firma)
 
                             """Comprobamos la autenticidad del certificado del emisor
                                                              consultado a la autoridad AC1"""
